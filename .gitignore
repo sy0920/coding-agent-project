@@ -1,0 +1,23 @@
+# 凭据与敏感配置 —— 绝不入库
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# agent 运行产物（工作目录）
+workspace/
+*.log
+
+# 示例演示目录中由 agent 生成的代码（种子数据 data.txt 仍入库）
+examples/demo/*.py
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
