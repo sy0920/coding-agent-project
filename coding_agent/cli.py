@@ -139,7 +139,8 @@ def _make_step_printer():
 
     def step(name, arguments, result):
         if name == "finish":
-            print(f"\n  ✓ 任务完成：{arguments.get('summary', '')}")
+            # 只给一个简短标记；完整总结由上层打印 result.final_answer，避免重复
+            print("\n  ✓ 任务完成")
             return
         print("\n  " + _format_step(name, arguments, result))
 

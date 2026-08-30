@@ -1,5 +1,5 @@
 from coding_agent import cli
-from coding_agent.cli import _format_step, _paint
+from coding_agent.cli import _format_step, _make_step_printer, _paint
 
 
 def test_format_read_file_hides_body():
@@ -76,3 +76,12 @@ def test_format_multi_line_result_keeps_newlines():
     assert "1. 写代码" in out
     assert "2. 测试" in out
     assert "\\n" not in out  # 不再出现字面反斜杠 n
+
+
+def test_finish_step_does_not_duplicate_summary(capsys):
+    """finish 事件只打印简短标记，完整总结由 result.final_answer 打印一次。"""
+    step = _make_step_printer()
+    step("finish", {"summary": "完成啦"}, "任务已结束")
+    out = capsys.readouterr().out
+    assert "✓ 任务完成" in out
+    assert "完成啦" not in out
