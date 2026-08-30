@@ -18,20 +18,26 @@ from .errors import AgentError
 from .llm import LLMClient
 from .session import SessionStore
 from .system_prompt import build_system_prompt, load_project_instructions
-from .tools import build_registry
+from .tools import build_registry, truncate
 
 
 def _make_step_printer():
-    """构造进度回调：打印每一步工具调用。"""
+    """构造进度回调：打印每一步工具调用、结果与错误。"""
 
-    def step(name, arguments):
+    def step(name, arguments, result):
         if name == "finish":
             print(f"\n  ✓ 任务完成：{arguments.get('summary', '')}")
-        else:
-            brief = str(arguments)
-            if len(brief) > 120:
-                brief = brief[:120] + "…"
-            print(f"\n  ▶ 调用工具 {name} {brief}")
+            return
+        brief = str(arguments)
+        if len(brief) > 120:
+            brief = brief[:120] + "…"
+        print(f"\n  ▶ 调用工具 {name} {brief}")
+        if result:
+            out = truncate(result, 400)
+            if result.startswith("错误"):
+                print(f"    ✗ {out}")
+            else:
+                print(f"    ↳ {out}")
 
     return step
 
@@ -157,7 +163,7 @@ def main(argv=None) -> int:
     parser.add_argument("task", nargs="?", help="编程任务描述（省略则进入交互模式）")
     parser.add_argument("--workspace", help="工作目录（agent 在其中读写与执行命令）")
     parser.add_argument("--max-iterations", type=int, help="最大迭代轮数")
-    parser.add_argument("--verbose", action="store_true", help="打印每一步工具调用与统计信息")
+    parser.add_argument("--verbose", action="store_true", help="打印每一步工具调用、结果与统计信息")
     parser.add_argument("--approve", action="store_true",
                         help="执行危险操作（如命令）前询问用户确认")
     args = parser.parse_args(argv)

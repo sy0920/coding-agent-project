@@ -159,3 +159,40 @@ def test_qa_over_file_flow(tmp_path):
     result = agent.run("data 文件里的数字平均值是多少")
     assert result.success
     assert result.final_answer == "平均值是 2"
+
+
+def test_on_step_receives_tool_result(tmp_path):
+    """进度回调应收到工具返回结果（供 CLI 打印过程）。"""
+    (tmp_path / "a.txt").write_text("hello")
+    r1 = LLMResponse(
+        None, [ToolCall("c1", "read_file", {"path": "a.txt"})], "tool_calls", {}
+    )
+    r2 = LLMResponse("完成", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    steps = []
+    agent = Agent(
+        llm, tools, cfg, "sys",
+        on_step=lambda name, args, result: steps.append((name, result)),
+    )
+    agent.run("读文件")
+    assert any(name == "read_file" and "hello" in result for name, result in steps)
+
+
+def test_on_step_receives_error_result(tmp_path):
+    """工具出错时，错误文本也应通过进度回调传给调用方。"""
+    r1 = LLMResponse(
+        None, [ToolCall("c1", "no_such_tool", {})], "tool_calls", {}
+    )
+    r2 = LLMResponse("完成", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    steps = []
+    agent = Agent(
+        llm, tools, cfg, "sys",
+        on_step=lambda name, args, result: steps.append((name, result)),
+    )
+    agent.run("任务")
+    assert any("未知工具" in result for name, result in steps)

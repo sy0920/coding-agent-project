@@ -60,7 +60,7 @@ python -m pytest
 ## 使用示例
 
 ```bash
-# 打印详细过程（每一步工具调用）
+# 打印详细过程（每一步工具调用及其结果、错误）
 python -m coding_agent "把 README 里所有 'colour' 改成 'color'" --workspace ./examples/demo --verbose
 
 # 指定工作目录与迭代上限
