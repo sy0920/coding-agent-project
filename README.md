@@ -142,6 +142,7 @@ python -m pytest
 
 ## 安全说明
 
+- **人工审批（human-in-the-loop）**：所有工具按风险分三级——`readonly`（只读，永不审批）、`modify`（写文件 / 精确替换，`--approve` 下逐条审批）、`dangerous`（执行命令，默认逐条审批）。审批不通过则拒绝执行，操作不会发生。
 - `run_command` 使用 `shell=True`，意味着模型可执行任意命令，这是 coding agent 的固有特性。本项目通过工作目录沙箱限制影响范围；生产环境建议配合容器（如 Docker）或虚拟机隔离。
 - API 密钥只通过环境变量 / `.env`（已 gitignore）提供，绝不出现在代码、提交历史或文档中。
 
