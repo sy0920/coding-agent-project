@@ -1,4 +1,5 @@
-from coding_agent.cli import _format_step
+from coding_agent import cli
+from coding_agent.cli import _format_step, _paint
 
 
 def test_format_read_file_hides_body():
@@ -31,3 +32,28 @@ def test_format_error_marked():
     out = _format_step("read_file", {"path": "nope.txt"}, "错误：文件不存在：nope.txt")
     assert "✗" in out
     assert "文件不存在" in out
+
+
+def test_format_edit_file_multiline_diff_keeps_each_line():
+    """多行改动按行展示，每行带 -/+ 前缀，而非压成单行。"""
+    old = "a = 1\nb = 2\nc = 3"
+    new = "a = 1\nb = 99\nc = 3"
+    out = _format_step(
+        "edit_file",
+        {"path": "a.py", "old_string": old, "new_string": new},
+        "已替换 1 处。",
+    )
+    assert "- a = 1" in out
+    assert "- c = 3" in out
+    assert "+ b = 99" in out
+    assert out.count("\n") >= 5  # 每行独立成行
+
+
+def test_paint_off_when_no_color():
+    # 测试环境下 stdout 非 tty → 颜色默认关闭，原样返回
+    assert _paint("31", "hi") == "hi"
+
+
+def test_paint_wraps_when_color_enabled(monkeypatch):
+    monkeypatch.setattr(cli, "_USE_COLOR", True)
+    assert _paint("31", "hi") == "\x1b[31mhi\x1b[0m"

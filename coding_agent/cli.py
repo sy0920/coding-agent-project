@@ -21,6 +21,43 @@ from .system_prompt import build_system_prompt, load_project_instructions
 from .tools import build_registry
 
 
+# ANSI 颜色：增强终端展示；非 tty（重定向 / 测试）或设置 NO_COLOR 时自动关闭
+_USE_COLOR = bool(sys.stdout.isatty()) and os.environ.get("NO_COLOR") is None
+
+if os.name == "nt" and _USE_COLOR:
+    try:
+        import ctypes
+
+        ctypes.windll.kernel32.SetConsoleMode(
+            ctypes.windll.kernel32.GetStdHandle(-11), 7
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _paint(code: str, text: str) -> str:
+    """给文本加 ANSI 颜色；关闭颜色时原样返回。"""
+    if not _USE_COLOR:
+        return text
+    return f"\x1b[{code}m{text}\x1b[0m"
+
+
+def _red(text: str) -> str:
+    return _paint("31", text)
+
+
+def _green(text: str) -> str:
+    return _paint("32", text)
+
+
+def _grey(text: str) -> str:
+    return _paint("90", text)
+
+
+def _bold(text: str) -> str:
+    return _paint("1", text)
+
+
 def _clip(text, limit: int = 120) -> str:
     """把文本压成单行并截断，用于简洁的过程展示。"""
     text = str(text) if text is not None else ""
@@ -30,6 +67,15 @@ def _clip(text, limit: int = 120) -> str:
     return text
 
 
+def _diff_lines(arguments: dict) -> str:
+    """把 edit_file 的 old/new 渲染成红(-)绿(+)的行级 diff（完整、不截断）。"""
+    old = str(arguments.get("old_string", ""))
+    new = str(arguments.get("new_string", ""))
+    lines = [f"     {_red('-')} {ln}" for ln in old.split("\n")]
+    lines += [f"     {_green('+')} {ln}" for ln in new.split("\n")]
+    return "\n".join(lines)
+
+
 def _format_step(name: str, arguments: dict, result: str) -> str:
     """把一次工具调用格式化为简洁可读文本：不刷屏、突出「改了什么」。
 
@@ -37,32 +83,29 @@ def _format_step(name: str, arguments: dict, result: str) -> str:
     这里只是给用户看的人类可读摘要，两者解耦。
     """
     is_error = (result or "").startswith("错误")
+    mark = _red("✗") if is_error else _grey("↳")
 
     if name == "read_file":
         # 只取结果首行摘要（共 N 行），不打印正文
         head = (result or "").split("\n", 1)[0]
-        mark = "✗" if is_error else "↳"
-        return f"▶ 读取 {arguments.get('path', '?')}\n     {mark} {head}"
+        return f"{_bold('▶ 读取')} {arguments.get('path', '?')}\n     {mark} {head}"
 
     if name == "write_file":
         path = arguments.get("path", "?")
         if is_error:
-            return f"▶ 写入 {path}\n     ✗ {result}"
-        return f"▶ 写入 {path}（{len(arguments.get('content', ''))} 字符）"
+            return f"{_bold('▶ 写入')} {path}\n     {_red('✗')} {result}"
+        return f"{_bold('▶ 写入')} {path}（{len(arguments.get('content', ''))} 字符）"
 
     if name == "edit_file":
         path = arguments.get("path", "?")
         if is_error:
-            return f"▶ 修改 {path}\n     ✗ {result}"
-        old = _clip(arguments.get("old_string", ""))
-        new = _clip(arguments.get("new_string", ""))
-        return f"▶ 修改 {path}：\n     - {old}\n     + {new}"
+            return f"{_bold('▶ 修改')} {path}\n     {_red('✗')} {result}"
+        return f"{_bold('▶ 修改')} {path}：\n{_diff_lines(arguments)}"
 
     # 其余工具（run_command / search_content / list_directory / git / todo 等）
     brief = _clip(arguments)
     out = _clip(result, 300)
-    mark = "✗" if is_error else "↳"
-    return f"▶ {name} {brief}\n     {mark} {out}"
+    return f"{_bold('▶ ' + name)} {brief}\n     {mark} {out}"
 
 
 def _make_step_printer():
