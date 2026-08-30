@@ -18,26 +18,61 @@ from .errors import AgentError
 from .llm import LLMClient
 from .session import SessionStore
 from .system_prompt import build_system_prompt, load_project_instructions
-from .tools import build_registry, truncate
+from .tools import build_registry
+
+
+def _clip(text, limit: int = 120) -> str:
+    """把文本压成单行并截断，用于简洁的过程展示。"""
+    text = str(text) if text is not None else ""
+    text = text.replace("\r", "").replace("\n", "\\n")
+    if len(text) > limit:
+        text = text[: limit - 1] + "…"
+    return text
+
+
+def _format_step(name: str, arguments: dict, result: str) -> str:
+    """把一次工具调用格式化为简洁可读文本：不刷屏、突出「改了什么」。
+
+    关键设计：工具返回的完整结果仍原样回填给模型（模型需要全文），
+    这里只是给用户看的人类可读摘要，两者解耦。
+    """
+    is_error = (result or "").startswith("错误")
+
+    if name == "read_file":
+        # 只取结果首行摘要（共 N 行），不打印正文
+        head = (result or "").split("\n", 1)[0]
+        mark = "✗" if is_error else "↳"
+        return f"▶ 读取 {arguments.get('path', '?')}\n     {mark} {head}"
+
+    if name == "write_file":
+        path = arguments.get("path", "?")
+        if is_error:
+            return f"▶ 写入 {path}\n     ✗ {result}"
+        return f"▶ 写入 {path}（{len(arguments.get('content', ''))} 字符）"
+
+    if name == "edit_file":
+        path = arguments.get("path", "?")
+        if is_error:
+            return f"▶ 修改 {path}\n     ✗ {result}"
+        old = _clip(arguments.get("old_string", ""))
+        new = _clip(arguments.get("new_string", ""))
+        return f"▶ 修改 {path}：\n     - {old}\n     + {new}"
+
+    # 其余工具（run_command / search_content / list_directory / git / todo 等）
+    brief = _clip(arguments)
+    out = _clip(result, 300)
+    mark = "✗" if is_error else "↳"
+    return f"▶ {name} {brief}\n     {mark} {out}"
 
 
 def _make_step_printer():
-    """构造进度回调：打印每一步工具调用、结果与错误。"""
+    """构造进度回调：打印每一步工具调用、结果与错误（人类可读摘要）。"""
 
     def step(name, arguments, result):
         if name == "finish":
             print(f"\n  ✓ 任务完成：{arguments.get('summary', '')}")
             return
-        brief = str(arguments)
-        if len(brief) > 120:
-            brief = brief[:120] + "…"
-        print(f"\n  ▶ 调用工具 {name} {brief}")
-        if result:
-            out = truncate(result, 400)
-            if result.startswith("错误"):
-                print(f"    ✗ {out}")
-            else:
-                print(f"    ↳ {out}")
+        print("\n  " + _format_step(name, arguments, result))
 
     return step
 
