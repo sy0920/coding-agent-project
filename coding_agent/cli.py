@@ -80,6 +80,24 @@ def _diff_lines(arguments: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_multi_result(mark: str, result: str, max_lines: int = 12, max_chars: int = 200) -> str:
+    """格式化多行工具结果：mark 接首行，后续行等宽缩进，超出则截断。
+
+    run_command / list_directory / todo / git 等的结果本就是多行清单或命令输出，
+    压成单行会暴露字面 \\n，这里保留换行、只截断行数与每行长度。
+    """
+    text = str(result) if result is not None else ""
+    lines = text.split("\n")
+    total = len(lines)
+    if total > max_lines:
+        lines = lines[:max_lines]
+        lines.append(f"…（共 {total} 行，已截断）")
+    trimmed = [ln[:max_chars] + ("…" if len(ln) > max_chars else "") for ln in lines]
+    body = "\n".join(trimmed)
+    indent = " " * 7  # 对齐到 "     ↳ " 之后正文的位置
+    return f"{mark} {body}".replace("\n", "\n" + indent)
+
+
 def _format_step(name: str, arguments: dict, result: str) -> str:
     """把一次工具调用格式化为简洁可读文本：不刷屏、突出「改了什么」。
 
@@ -113,8 +131,7 @@ def _format_step(name: str, arguments: dict, result: str) -> str:
 
     # 其余工具（run_command / search_content / list_directory / git / todo 等）
     brief = _clip(arguments)
-    out = _clip(result, 300)
-    return f"{_bold('▶ ' + name)} {brief}\n     {mark} {out}"
+    return f"{_bold('▶ ' + name)} {brief}\n     {_format_multi_result(mark, result)}"
 
 
 def _make_step_printer():

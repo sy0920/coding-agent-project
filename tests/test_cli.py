@@ -66,3 +66,13 @@ def test_format_compact_shows_token_change():
     assert "压缩" in out
     assert "12000" in out
     assert "3400" in out
+
+
+def test_format_multi_line_result_keeps_newlines():
+    """todo / list_directory 等多行结果应真正换行，而非显示字面 \\n。"""
+    result = "当前任务清单：\n1. 写代码\n2. 测试"
+    out = _format_step("todo", {"todos": ["x"]}, result)
+    assert "当前任务清单：" in out
+    assert "1. 写代码" in out
+    assert "2. 测试" in out
+    assert "\\n" not in out  # 不再出现字面反斜杠 n
