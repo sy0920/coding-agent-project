@@ -146,6 +146,36 @@ def test_dangerous_tool_approved_runs(tmp_path):
     assert any("hi" in m["content"] for m in tool_msgs)
 
 
+def test_default_mode_does_not_approve_safe_ops(tmp_path):
+    """默认（approve_all=False）下，非危险操作即使配置了 approver 也不审批。"""
+    r1 = LLMResponse(None, [ToolCall("c1", "list_directory", {})], "tool_calls", {})
+    r2 = LLMResponse("完成", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    # approver 一律拒绝，但 list_directory 非危险、默认不审批 → 仍执行
+    agent = Agent(llm, tools, cfg, "sys", approver=lambda name, args: False)
+    result = agent.run("任务")
+    assert result.success
+    tool_msgs = [m for m in llm.calls[-1][0] if m["role"] == "tool"]
+    assert not any("拒绝" in m["content"] for m in tool_msgs)
+
+
+def test_approve_all_rejects_safe_ops(tmp_path):
+    """approve_all=True 时，非危险操作也要审批，拒绝则不执行。"""
+    r1 = LLMResponse(None, [ToolCall("c1", "list_directory", {})], "tool_calls", {})
+    r2 = LLMResponse("完成", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    agent = Agent(
+        llm, tools, cfg, "sys", approver=lambda name, args: False, approve_all=True
+    )
+    agent.run("任务")
+    tool_msgs = [m for m in llm.calls[-1][0] if m["role"] == "tool"]
+    assert any("拒绝" in m["content"] for m in tool_msgs)
+
+
 def test_qa_over_file_flow(tmp_path):
     """「检索→阅读→作答」的基于文件的问答链路能端到端跑通。"""
     (tmp_path / "data.txt").write_text("1\n2\n3\n")

@@ -326,7 +326,7 @@ def main(argv=None) -> int:
     parser.add_argument("--max-iterations", type=int, help="最大迭代轮数")
     parser.add_argument("--verbose", action="store_true", help="打印每一步工具调用、结果与统计信息")
     parser.add_argument("--approve", action="store_true",
-                        help="执行危险操作（如命令）前询问用户确认")
+                        help="对每一步操作都询问确认；默认只对危险操作（如命令）审批")
     args = parser.parse_args(argv)
 
     config = Config.from_env()
@@ -347,7 +347,8 @@ def main(argv=None) -> int:
             config,
             build_system_prompt(config.workspace, instructions),
             on_step=_make_step_printer() if args.verbose else None,
-            approver=_make_approver() if args.approve else None,
+            approver=_make_approver(),
+            approve_all=args.approve,
             on_text=streamer,
         )
     except AgentError as exc:

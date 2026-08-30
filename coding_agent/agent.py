@@ -50,6 +50,7 @@ class Agent:
         on_step: Optional[Callable[[str, dict, str], None]] = None,
         approver: Optional[Callable[[str, dict], bool]] = None,
         on_text: Optional[Callable[[str], None]] = None,
+        approve_all: bool = False,
     ):
         self.llm = llm
         self.tools = tools
@@ -58,8 +59,10 @@ class Agent:
         # 进度回调 on_step(name, arguments, result)，供 CLI 打印过程；
         # name 通常是工具名，也可能是 "compact"（上下文压缩）这类循环内事件。
         self.on_step = on_step or (lambda name, args, result: None)
-        # 危险操作审批回调 approver(name, arguments) -> bool；为 None 表示无需审批
+        # 审批回调 approver(name, arguments) -> bool；为 None 表示完全不做人工审批。
         self.approver = approver
+        # 审批范围：True = 对所有工具调用都审批；False = 只审批危险操作。
+        self.approve_all = approve_all
         # 流式文本回调 on_text(text)；为 None 时走非流式 chat，否则走 chat_stream
         self.on_text = on_text
 
@@ -106,9 +109,11 @@ class Agent:
                     ctx.add_tool_result(tc.id, tc.name, "任务已结束")
                     self.on_step("finish", {"summary": finish_summary}, "任务已结束")
                     continue
-                # 危险操作（如 run_command）在配置了审批回调时，先征求用户同意
+                # 审批范围：approve_all 时所有操作都审，否则只审危险操作（如 run_command）。
+                # 审批回调为 None（未配置）则一律直接执行。
+                needs_approval = self.approve_all or self.tools.is_dangerous(tc.name)
                 if (
-                    self.tools.is_dangerous(tc.name)
+                    needs_approval
                     and self.approver is not None
                     and not self.approver(tc.name, tc.arguments)
                 ):
