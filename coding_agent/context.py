@@ -85,6 +85,23 @@ class Conversation:
         }
         self.messages = [self.messages[0], summary_msg] + self.messages[cut:]
 
+    # ---- 序列化（会话持久化） -----------------------------------------
+
+    def to_dict(self) -> dict:
+        """序列化为可 JSON 存储的字典（messages 本就是 OpenAI 格式 dict 列表）。"""
+        return {"messages": self.messages}
+
+    @classmethod
+    def from_dict(cls, data: dict, max_context_tokens: int) -> "Conversation":
+        """从序列化结果恢复会话。system 提示词从首条消息里取回。"""
+        messages = data["messages"]
+        system_prompt = ""
+        if messages and messages[0].get("role") == "system":
+            system_prompt = messages[0].get("content") or ""
+        conv = cls(system_prompt, max_context_tokens)
+        conv.messages = messages
+        return conv
+
     # ---- 辅助 ---------------------------------------------------------
 
     @staticmethod

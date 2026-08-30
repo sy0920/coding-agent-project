@@ -16,6 +16,7 @@ from .agent import Agent
 from .config import Config
 from .errors import AgentError
 from .llm import LLMClient
+from .session import SessionStore
 from .system_prompt import build_system_prompt
 from .tools import build_registry
 
@@ -49,10 +50,55 @@ def _run_task(config, agent, task, verbose):
     return 0 if result.success else 1
 
 
+def _handle_session_command(task, conversation, store, max_context_tokens):
+    """解析会话管理命令（以 / 开头，避免与自然语言任务混淆）。
+
+    返回 (是否命中命令, 更新后的会话, 提示语)。未命中时前两项原样返回。
+    """
+    cmd, _, arg = task.partition(" ")
+    cmd = cmd.lower()
+    arg = arg.strip()
+
+    if cmd in ("/clear", "clear") and not arg:
+        return True, None, "（已清空会话，开始新会话）"
+
+    if cmd == "/save":
+        if not arg:
+            return True, conversation, "用法：/save <名字>"
+        if conversation is None:
+            return True, conversation, "（当前没有会话，先输入一个任务再保存）"
+        try:
+            store.save(arg, conversation)
+        except ValueError as exc:
+            return True, conversation, f"（保存失败：{exc}）"
+        return True, conversation, f"（会话已保存为 {arg}）"
+
+    if cmd == "/sessions":
+        names = store.list_names()
+        if not names:
+            return True, conversation, "（暂无已保存会话）"
+        return True, conversation, "已保存会话：" + "、".join(names)
+
+    if cmd in ("/resume", "/switch"):
+        if not arg:
+            return True, conversation, f"用法：{cmd} <名字>"
+        if not store.exists(arg):
+            return True, conversation, f"（会话 {arg} 不存在，用 /sessions 查看）"
+        try:
+            conv = store.load(arg, max_context_tokens)
+        except ValueError as exc:
+            return True, conversation, f"（恢复失败：{exc}）"
+        return True, conv, f"（已恢复会话 {arg}）"
+
+    return False, conversation, None
+
+
 def _repl(config, agent, verbose):
+    store = SessionStore(os.path.join(config.workspace, ".sessions"))
     print(f"coding-agent 交互模式（模型 {config.model}）")
     print("输入编程任务开始；后续输入会延续同一会话（agent 记住上下文）。")
-    print("输入 exit / quit / 空行退出；输入 clear 清空会话重新开始。\n")
+    print("会话命令：/save <名字> 保存 · /resume <名字> 恢复 · /switch <名字> 切换 · "
+          "/sessions 列出 · /clear 清空；输入 exit / quit / 空行退出。\n")
     conversation = None
     while True:
         try:
@@ -62,10 +108,15 @@ def _repl(config, agent, verbose):
             break
         if task in ("", "exit", "quit"):
             break
-        if task in ("clear", "/clear"):
-            conversation = None
-            print("（已清空会话，开始新会话）\n")
+
+        handled, conversation, message = _handle_session_command(
+            task, conversation, store, config.max_context_tokens
+        )
+        if handled:
+            print(message)
+            print()
             continue
+
         result = agent.run(task, conversation)
         conversation = result.conversation
         print("\n" + "─" * 60)
