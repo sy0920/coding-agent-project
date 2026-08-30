@@ -22,12 +22,21 @@
 
 ## 准备
 
+先清空工作区（下面这条用 Python 一行，在 PowerShell / bash 下都能跑，避免 `rm -rf` 在 PowerShell 被当成 `Remove-Item` 参数而报错）：
+
 ```bash
-rm -rf workspace/*            # 清空工作区
-python -m coding_agent --verbose   # 进入交互模式
+python -c "import shutil,os; shutil.rmtree('workspace', ignore_errors=True); os.makedirs('workspace', exist_ok=True)"
 ```
 
-> Windows 下若用管道脚本复现中文输入，需加 `PYTHONUTF8=1` 前缀；手动逐行输入则无需。
+> 用 shell 原生命令也行：bash 是 `rm -rf workspace/*`，PowerShell 是 `Remove-Item workspace\* -Recurse -Force`。
+
+然后进入交互模式：
+
+```bash
+python -m coding_agent --verbose
+```
+
+> 手动逐行输入中文任务时无需任何额外设置；只有用管道脚本喂入中文时才需在 bash 下加 `PYTHONUTF8=1` 前缀。
 
 ## 演示 A：多文件项目 + 多轮会话 + 错误自纠正
 
@@ -83,23 +92,23 @@ exit
 退出交互模式，用单次任务模式，**只给文件名、不给路径**：
 
 ```bash
-python -m coding_agent "sample.txt 里出现次数最多的词是什么？出现了几次？" \
-  --workspace ./workspace --verbose
+python -m coding_agent "sample.txt 里出现次数最多的词是什么？出现了几次？" --workspace ./workspace --verbose
 ```
 
 **关键观察点：** agent 先两级 `list_directory`（`{}` → `texttool`）定位到 `sample.txt`，再 `read_file` 分析。这正是「未指定文件时主动检索」的系统提示词在起作用。
 
 ## 演示 D：人工审批（--approve）
 
-```bash
-# 通过：出现 ⚠ 询问时输入 y
-printf 'y\ny\n' | PYTHONUTF8=1 python -m coding_agent "运行 hello.py 看它的输出" \
-  --workspace ./workspace --approve --verbose
+运行下面命令，出现 `⚠ 是否执行 run_command …？[y/N]` 时手动输入 `y`（通过）或 `n`（拒绝）：
 
-# 拒绝：出现 ⚠ 询问时输入 n
-printf 'n\n' | PYTHONUTF8=1 python -m coding_agent "运行 hello.py 并告诉我输出" \
-  --workspace ./workspace --approve --verbose
+```bash
+python -m coding_agent "运行 hello.py 看它的输出" --workspace ./workspace --approve --verbose
 ```
+
+- 输入 `y` → 命令执行成功，输出 `hello world`；
+- 输入 `n` → 命令不执行，回填「用户拒绝了该操作」，模型据此调整（例如改从文件内容推断答案）。
+
+> 想用管道脚本非交互喂入：bash 用 `printf 'y\n' | python …`，PowerShell 用 `"y" | python …`（换行用 PowerShell 的反引号 n）。
 
 **关键观察点：** 每次 `run_command` 前都弹出 `⚠ 是否执行 run_command …？[y/N]`；输入 `y` 命令执行成功（输出 `hello world`），输入 `n` 命令不执行、回填「用户拒绝了该操作」，模型据此调整或改从文件内容推断答案。
 
