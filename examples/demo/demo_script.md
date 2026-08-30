@@ -102,7 +102,7 @@ python -m coding_agent "sample.txt 里出现次数最多的词是什么？出现
 运行下面命令，出现 `⚠ 是否执行 run_command …？[y/N]` 时手动输入 `y`（通过）或 `n`（拒绝）：
 
 ```bash
-python -m coding_agent "运行 hello.py 看它的输出" --workspace ./workspace --approve --verbose
+python -m coding_agent "写一个快排程序" --workspace ./workspace --approve --verbose
 ```
 
 - 输入 `y` → 命令执行成功，输出 `hello world`；
