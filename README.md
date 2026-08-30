@@ -24,11 +24,12 @@
 ## 特性
 
 - **完整 agent 循环**：`思考 → 行动 → 观察` 反复迭代，直到模型给出最终回答或调用 `finish` 工具。
+- **流式输出**：模型回复实时逐字打印；工具调用与结果以简洁摘要展示（写文件只显示字符数、编辑显示行级 diff、多行结果保留换行），不刷屏。
 - **多轮会话记忆**：交互模式下后续输入沿用同一会话（agent 记住之前的上下文）。
-- **会话持久化**：每轮自动落盘；`/save` 命名保存、`/resume`（或 `/switch`）恢复、`/sessions` 列出、`/clear` 清空，会话可跨进程恢复。
+- **会话持久化**：每轮自动落盘；`/save` 命名保存、`/resume`（或 `/switch`）恢复、`/sessions` 列出、`/clear` 清空，会话可跨进程恢复；退出时由模型自动总结生成会话标题。
 - **自研工具系统**：9 个工具（读文件 / 写文件 / 精确替换 / 列目录 / 搜索 / 执行命令 / git / todo / 结束），全部**在本地执行**。
-- **任务规划**：`todo` 工具让模型在多步任务前先列计划、完成后更新，进度可追踪。
-- **人工审批**：`--approve` 开启后，执行命令等危险操作前询问用户确认（human-in-the-loop）。
+- **任务规划**：`todo` 工具让模型在多步任务前先列计划、完成后更新；完成项打 ✓、未完成项打 ✗ 并附原因，进度可追踪。
+- **三级风险审批**：只读操作永不审批，执行命令（危险）默认审批，`--approve` 再把写文件等改动操作纳入逐条审批（human-in-the-loop）。
 - **项目级规则**：自动读取工作目录下的 `AGENTS.md` / `CLAUDE.md`，注入系统提示词定制 agent 行为。
 - **上下文管理**：自研 token 估算 + 超预算时的「摘要式压缩」，压缩后消息结构仍合法（不拆散 tool_calls 与结果）。
 - **多重终止条件**：无工具调用即结束、`finish` 工具、最大迭代上限、重复调用死循环检测。
@@ -66,7 +67,7 @@ python -m coding_agent "把 README 里所有 'colour' 改成 'color'" --workspac
 # 指定工作目录与迭代上限
 python -m coding_agent "重构 utils.py 并跑通测试" --workspace ./my_project --max-iterations 40
 
-# 执行危险操作（命令）前人工确认
+# 把写文件等改动操作也纳入逐条审批（只读永不审批，命令默认已审批）
 python -m coding_agent "重构 utils.py" --approve
 ```
 
@@ -144,7 +145,7 @@ cli.py ──▶ Agent（核心循环）
 python -m pytest
 ```
 
-30 个用例覆盖：agent 循环的各终止路径、工具读写/替换/越界/超时、token 估算、上下文压缩的结构合法性、模型输出解析。测试使用 `tests/fakes.py` 的 `FakeLLM` 模拟模型，**完全离线、确定、可重复**。
+81 个用例覆盖：agent 循环的各终止路径、工具读写/替换/越界/超时、token 估算、上下文压缩的结构合法性、模型输出解析、流式输出、审批策略、todo 完成标记、会话标题清洗。测试使用 `tests/fakes.py` 的 `FakeLLM` 模拟模型，**完全离线、确定、可重复**。
 
 ## 安全说明
 
@@ -164,12 +165,15 @@ coding-agent-project/
 │   ├── parsing.py          # 模型输出（tool_calls）解析
 │   ├── tokens.py           # token 估算
 │   ├── system_prompt.py    # 系统提示词
+│   ├── session.py          # 会话持久化
 │   ├── errors.py           # 异常类型
 │   └── tools/
-│       ├── base.py         # 工具框架（定义/注册/分发）
+│       ├── base.py         # 工具框架（定义/注册/分发 + 风险分级）
 │       ├── file_tools.py   # 文件读写与替换
 │       ├── command_tool.py # 命令执行
-│       └── search_tool.py  # 内容搜索
+│       ├── search_tool.py  # 内容搜索
+│       ├── todo_tool.py    # 任务清单（✓/✗ 完成标记）
+│       └── git_tool.py     # git 状态/差异/日志
 ├── tests/                  # 离线单元测试
 ├── examples/               # 演示任务
 ├── README.txt              # 提交用说明（<=1000 字）

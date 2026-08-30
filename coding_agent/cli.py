@@ -327,7 +327,7 @@ def main(argv=None) -> int:
     parser.add_argument("--max-iterations", type=int, help="最大迭代轮数")
     parser.add_argument("--verbose", action="store_true", help="打印每一步工具调用、结果与统计信息")
     parser.add_argument("--approve", action="store_true",
-                        help="对每一步操作都询问确认；默认只对危险操作（如命令）审批")
+                        help="把写文件等改动操作也纳入逐条审批；只读操作永不审批（危险操作默认已审批）")
     args = parser.parse_args(argv)
 
     config = Config.from_env()
