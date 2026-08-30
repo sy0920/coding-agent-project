@@ -57,3 +57,12 @@ def test_paint_off_when_no_color():
 def test_paint_wraps_when_color_enabled(monkeypatch):
     monkeypatch.setattr(cli, "_USE_COLOR", True)
     assert _paint("31", "hi") == "\x1b[31mhi\x1b[0m"
+
+
+def test_format_compact_shows_token_change():
+    out = _format_step(
+        "compact", {"before": 12000, "after": 3400}, "较早的历史已压缩为摘要"
+    )
+    assert "压缩" in out
+    assert "12000" in out
+    assert "3400" in out

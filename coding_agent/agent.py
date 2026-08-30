@@ -54,7 +54,8 @@ class Agent:
         self.tools = tools
         self.config = config
         self.system_prompt = system_prompt
-        # 进度回调 on_step(tool_name, arguments, result)，供 CLI 打印过程
+        # 进度回调 on_step(name, arguments, result)，供 CLI 打印过程；
+        # name 通常是工具名，也可能是 "compact"（上下文压缩）这类循环内事件。
         self.on_step = on_step or (lambda name, args, result: None)
         # 危险操作审批回调 approver(name, arguments) -> bool；为 None 表示无需审批
         self.approver = approver
@@ -69,8 +70,14 @@ class Agent:
         repeat_count = 0
 
         for i in range(self.config.max_iterations):
-            # 1. 上下文预算控制
-            ctx.maybe_compact(self.llm.summarize)
+            # 1. 上下文预算控制（超预算时压缩，并通过 on_step 通知外部以便观测）
+            before = ctx.total_tokens
+            if ctx.maybe_compact(self.llm.summarize):
+                self.on_step(
+                    "compact",
+                    {"before": before, "after": ctx.total_tokens},
+                    "较早的历史已压缩为摘要",
+                )
 
             # 2. 调用模型
             resp = self.llm.chat(ctx.messages, self.tools.to_openai_tools())

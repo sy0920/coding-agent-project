@@ -43,25 +43,26 @@ class Conversation:
         return estimate_messages_tokens(self.messages)
 
     def maybe_compact(self, summarize_fn) -> bool:
-        """若估算 token 数超过预算，则压缩历史；返回是否发生了压缩。
+        """若估算 token 数超过预算，则压缩历史；返回是否真的发生了压缩。
 
         summarize_fn(text) -> str：由外部传入的摘要函数（通常是 LLM 调用），
         这样上下文管理不直接依赖模型客户端，职责解耦、便于测试。
         """
         if self.total_tokens <= self.max_context_tokens:
             return False
-        self._compact(summarize_fn)
-        return True
+        return self._compact(summarize_fn)
 
-    def _compact(self, summarize_fn) -> None:
+    def _compact(self, summarize_fn) -> bool:
         """把较早的历史压缩成一条摘要消息，只保留最近的一整段「安全」上下文。
 
         关键点：保留段的起点必须是 user 或 assistant 消息。这样位于保留段内的
         每条 tool 结果消息，其对应的 assistant tool_calls 也一定在保留段内，
         不会出现「孤儿 tool 消息」，从而保证后续请求不报 400 错误。
+
+        返回是否真的执行了压缩（消息太少或没有可摘要内容时返回 False）。
         """
         if len(self.messages) <= 3:
-            return
+            return False
 
         tail_budget = max(self.max_context_tokens // 2, 2000)
         cut = 1  # 默认只保留 system 之后从 user 开始
@@ -76,7 +77,7 @@ class Conversation:
 
         middle = self.messages[1:cut]
         if not middle:
-            return
+            return False
 
         summary = summarize_fn(self._to_text(middle))
         summary_msg = {
@@ -84,6 +85,7 @@ class Conversation:
             "content": "[历史摘要]\n" + (summary or ""),
         }
         self.messages = [self.messages[0], summary_msg] + self.messages[cut:]
+        return True
 
     # ---- 序列化（会话持久化） -----------------------------------------
 

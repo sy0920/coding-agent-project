@@ -1,5 +1,6 @@
 from coding_agent.agent import Agent
 from coding_agent.config import Config
+from coding_agent.context import Conversation
 from coding_agent.llm import LLMResponse
 from coding_agent.parsing import ToolCall
 from coding_agent.tools import build_registry
@@ -196,3 +197,23 @@ def test_on_step_receives_error_result(tmp_path):
     )
     agent.run("任务")
     assert any("未知工具" in result for name, result in steps)
+
+
+def test_on_step_receives_compact_event(tmp_path, monkeypatch):
+    """上下文压缩发生时，进度回调应收到 compact 事件。"""
+    r1 = LLMResponse(None, [ToolCall("c1", "list_directory", {})], "tool_calls", {})
+    r2 = LLMResponse("完成", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    steps = []
+    agent = Agent(
+        llm, tools, cfg, "sys",
+        on_step=lambda name, args, result: steps.append((name, args, result)),
+    )
+    # 真实压缩逻辑已由 test_context 覆盖；这里只验证 agent 把压缩信号转发给 on_step
+    monkeypatch.setattr(Conversation, "maybe_compact", lambda self, fn: True)
+    agent.run("任务")
+    compact = [args for name, args, _ in steps if name == "compact"]
+    assert compact
+    assert "before" in compact[0] and "after" in compact[0]

@@ -58,6 +58,10 @@ def _bold(text: str) -> str:
     return _paint("1", text)
 
 
+def _yellow(text: str) -> str:
+    return _paint("33", text)
+
+
 def _clip(text, limit: int = 120) -> str:
     """把文本压成单行并截断，用于简洁的过程展示。"""
     text = str(text) if text is not None else ""
@@ -84,6 +88,11 @@ def _format_step(name: str, arguments: dict, result: str) -> str:
     """
     is_error = (result or "").startswith("错误")
     mark = _red("✗") if is_error else _grey("↳")
+
+    if name == "compact":
+        before = arguments.get("before", "?")
+        after = arguments.get("after", "?")
+        return f"{_yellow('⚠ 上下文压缩')} {before} → {after} tokens"
 
     if name == "read_file":
         # 只取结果首行摘要（共 N 行），不打印正文

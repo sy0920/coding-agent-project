@@ -61,3 +61,13 @@ def test_compaction_calls_summarize_once():
     # 摘要消息应作为第二条 system 消息存在
     assert c.messages[1]["role"] == "system"
     assert "历史摘要" in c.messages[1]["content"]
+
+
+def test_maybe_compact_returns_false_when_nothing_to_compact():
+    """超预算但无可压缩内容（消息太少）时，应返回 False 且不改动消息。"""
+    c = Conversation("sys", 100000)
+    c.add_user("hello")  # 仅 system + user 两条
+    c.max_context_tokens = 1  # 故意超预算
+    assert c.maybe_compact(lambda text: "摘要") is False
+    assert len(c.messages) == 2
+    assert c.messages[0]["role"] == "system"
