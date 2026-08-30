@@ -36,6 +36,17 @@ class SessionStore:
             data = json.load(f)
         return Conversation.from_dict(data, max_context_tokens)
 
+    def delete(self, name: str) -> bool:
+        """删除指定会话文件；不存在时返回 False。"""
+        try:
+            path = self._path(name)
+        except ValueError:
+            return False
+        if os.path.isfile(path):
+            os.remove(path)
+            return True
+        return False
+
     def exists(self, name: str) -> bool:
         try:
             return os.path.isfile(self._path(name))

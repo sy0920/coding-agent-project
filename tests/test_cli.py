@@ -1,5 +1,5 @@
 from coding_agent import cli
-from coding_agent.cli import _format_step, _make_step_printer, _paint
+from coding_agent.cli import _clean_title, _format_step, _make_step_printer, _paint
 
 
 def test_format_read_file_hides_body():
@@ -85,3 +85,19 @@ def test_finish_step_does_not_duplicate_summary(capsys):
     out = capsys.readouterr().out
     assert "✓ 任务完成" in out
     assert "完成啦" not in out
+
+
+def test_clean_title_strips_illegal_chars():
+    assert _clean_title("统计词频") == "统计词频"
+    assert _clean_title('"统计词频"') == "统计词频"
+    assert _clean_title("a/b\\c:d") == "abcd"
+    assert _clean_title("a<b>c|d?e*f") == "abcdef"
+    assert _clean_title("标题\n换行\t制表") == "标题换行制表"
+
+
+def test_clean_title_fallback_and_truncate():
+    assert _clean_title("") == "default"
+    assert _clean_title("   ") == "default"
+    assert _clean_title('""') == "default"
+    long = _clean_title("这是一个非常非常非常非常非常长的标题，超过二十四个字符就会被截断处理")
+    assert len(long) <= 24

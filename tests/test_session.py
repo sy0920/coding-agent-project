@@ -43,3 +43,18 @@ def test_rejects_illegal_name(tmp_path):
     except ValueError:
         return
     raise AssertionError("应拒绝含路径分隔符的非法会话名")
+
+
+def test_delete_removes_session(tmp_path):
+    store = SessionStore(str(tmp_path))
+    store.save("a", _conversation_with_history())
+    assert store.exists("a")
+    assert store.delete("a") is True
+    assert not store.exists("a")
+    # 删除不存在的会话返回 False
+    assert store.delete("a") is False
+
+
+def test_delete_illegal_name_returns_false(tmp_path):
+    store = SessionStore(str(tmp_path))
+    assert store.delete("../evil") is False

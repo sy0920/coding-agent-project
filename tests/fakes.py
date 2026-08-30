@@ -29,3 +29,7 @@ class FakeLLM:
     def summarize(self, text, max_tokens=512):
         self.summarize_calls.append(text)
         return "（摘要）"
+
+    def generate_title(self, messages):
+        # 测试里不需要真实标题，返回空串（调用方会回退到默认名）。
+        return ""

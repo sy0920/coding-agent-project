@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import sys
 
 # Windows 下终端编码可能是 GBK，强制用 UTF-8 输出并容错，保证中文正常显示
@@ -203,6 +204,15 @@ def _print_final_answer(result) -> None:
         print(result.final_answer or "（无输出）")
 
 
+def _clean_title(title: str, fallback: str = "default") -> str:
+    """清洗 LLM 生成的标题，去掉文件系统非法字符，得到可用的会话名。"""
+    title = (title or "").strip().strip('"\'“”‘’')
+    # 去掉 Windows/Unix 文件名非法字符与换行、制表符
+    title = re.sub(r'[<>:"/\\|?*\r\n\t]', "", title)
+    title = title[:24]
+    return title or fallback
+
+
 def _run_task(config, agent, task, verbose, streamer):
     print(f"模型：{config.model}   工作目录：{os.path.abspath(config.workspace)}\n")
     print(f"任务：{task}\n")
@@ -295,6 +305,15 @@ def _repl(config, agent, verbose, streamer):
         if verbose:
             print(f"[迭代 {result.iterations} 轮 / 终止原因 {result.stop_reason}]")
         print()
+
+    # 退出时：若用户一直用默认名（未手动 /save 命名），用 LLM 生成标题定稿。
+    # 手动命名（/save、/resume、/switch）优先级更高，这里不覆盖。
+    if conversation is not None and current_name == "default":
+        title = _clean_title(agent.llm.generate_title(conversation.messages))
+        if title != "default":
+            store.save(title, conversation)
+            store.delete("default")
+            print(f"（会话已保存为「{title}」）")
 
 
 def main(argv=None) -> int:

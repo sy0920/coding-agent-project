@@ -155,6 +155,42 @@ class LLMClient:
         except Exception as exc:  # noqa: BLE001 —— 摘要失败不应中断主流程
             return f"（摘要失败：{exc}）"
 
+    def generate_title(self, messages) -> str:
+        """根据对话历史生成一个简短标题，用于会话自动命名。
+
+        只取用户消息（任务描述）作为输入，让模型概括成不超过 12 个汉字的标题。
+        生成失败（网络错误等）返回空串，由调用方回退到默认名，绝不让标题生成
+        阻塞退出流程。
+        """
+        user_parts = [
+            str(m.get("content") or "")
+            for m in messages
+            if m.get("role") == "user" and m.get("content")
+        ]
+        text = " ".join(user_parts)[:2000]
+        if not text.strip():
+            return ""
+        try:
+            resp = self.client.chat.completions.create(
+                model=self.config.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是会话标题助手。根据用户的编程任务，用不超过 12 个汉字"
+                            "概括出一个简洁的会话标题。只输出标题本身，不要输出引号、"
+                            "标点或任何解释。"
+                        ),
+                    },
+                    {"role": "user", "content": text},
+                ],
+                temperature=0.0,
+                max_tokens=32,
+            )
+            return (resp.choices[0].message.content or "").strip()
+        except Exception:  # noqa: BLE001 —— 标题生成失败不应阻塞退出
+            return ""
+
     def _build_kwargs(self, messages, tools) -> dict:
         kwargs: dict[str, Any] = {
             "model": self.config.model,

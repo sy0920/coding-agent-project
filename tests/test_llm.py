@@ -141,3 +141,85 @@ def test_multiple_tool_calls_grouped_by_index():
     assert [tc.id for tc in resp.tool_calls] == ["c0", "c1"]
     assert resp.tool_calls[0].name == "list_directory"
     assert resp.tool_calls[1].arguments == {"path": "a.txt"}
+
+
+# ---- generate_title 的非流式 fake（create 返回 resp，而非 stream）----
+
+
+class _FakeMessage:
+    def __init__(self, content):
+        self.content = content
+
+
+class _FakeRespChoice:
+    def __init__(self, content):
+        self.message = _FakeMessage(content)
+
+
+class _FakeResp:
+    def __init__(self, content):
+        self.choices = [_FakeRespChoice(content)]
+
+
+class _TitleCompletions:
+    def __init__(self, resp):
+        self._resp = resp
+        self.kwargs = None
+
+    def create(self, **kwargs):
+        self.kwargs = kwargs
+        return self._resp
+
+
+class _TitleChat:
+    def __init__(self, resp):
+        self.completions = _TitleCompletions(resp)
+
+
+class _TitleOpenAI:
+    def __init__(self, resp):
+        self.chat = _TitleChat(resp)
+
+
+def _title_client(resp) -> LLMClient:
+    client = LLMClient(Config(api_key="test"))
+    client.client = _TitleOpenAI(resp)
+    return client
+
+
+def test_generate_title_returns_stripped_title():
+    client = _title_client(_FakeResp(" 统计词频 "))
+    title = client.generate_title([
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "写一个统计词频的工具"},
+        {"role": "tool", "content": "..."},
+    ])
+    assert title == "统计词频"
+    # 传给模型的应是拼接后的用户消息（工具/系统消息被过滤掉）
+    kwargs = client.client.chat.completions.kwargs
+    user_msg = [m for m in kwargs["messages"] if m["role"] == "user"][0]
+    assert "统计词频" in user_msg["content"]
+
+
+def test_generate_title_no_user_content_returns_empty():
+    # 没有用户消息时直接返回空串，不调用模型
+    client = LLMClient(Config(api_key="test"))
+    assert client.generate_title([{"role": "system", "content": "sys"}]) == ""
+
+
+def test_generate_title_returns_empty_on_error():
+    class _BoomCompletions:
+        def create(self, **kwargs):
+            raise RuntimeError("网络错误")
+
+    class _BoomChat:
+        def __init__(self):
+            self.completions = _BoomCompletions()
+
+    class _BoomOpenAI:
+        def __init__(self):
+            self.chat = _BoomChat()
+
+    client = LLMClient(Config(api_key="test"))
+    client.client = _BoomOpenAI()
+    assert client.generate_title([{"role": "user", "content": "任务"}]) == ""
