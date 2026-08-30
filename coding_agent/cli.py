@@ -106,7 +106,8 @@ def _format_step(name: str, arguments: dict, result: str) -> str:
     这里只是给用户看的人类可读摘要，两者解耦。
     """
     is_error = (result or "").startswith("错误")
-    mark = _red("✗") if is_error else _grey("↳")
+    is_rejected = (result or "").startswith("用户拒绝了")
+    mark = _red("✗") if (is_error or is_rejected) else _grey("↳")
 
     if name == "compact":
         before = arguments.get("before", "?")
@@ -120,13 +121,13 @@ def _format_step(name: str, arguments: dict, result: str) -> str:
 
     if name == "write_file":
         path = arguments.get("path", "?")
-        if is_error:
+        if is_error or is_rejected:
             return f"{_bold('▶ 写入')} {path}\n     {_red('✗')} {result}"
         return f"{_bold('▶ 写入')} {path}（{len(arguments.get('content', ''))} 字符）"
 
     if name == "edit_file":
         path = arguments.get("path", "?")
-        if is_error:
+        if is_error or is_rejected:
             return f"{_bold('▶ 修改')} {path}\n     {_red('✗')} {result}"
         return f"{_bold('▶ 修改')} {path}：\n{_diff_lines(arguments)}"
 

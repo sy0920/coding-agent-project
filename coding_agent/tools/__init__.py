@@ -61,6 +61,7 @@ def build_registry(config) -> ToolRegistry:
             "required": ["path", "content"],
         },
         func=file_tools.write_file,
+        risk="modify",
     ))
 
     registry.register(Tool(
@@ -77,6 +78,7 @@ def build_registry(config) -> ToolRegistry:
             "required": ["path", "old_string", "new_string"],
         },
         func=file_tools.edit_file,
+        risk="modify",
     ))
 
     registry.register(Tool(
@@ -106,7 +108,7 @@ def build_registry(config) -> ToolRegistry:
             "required": ["command"],
         },
         func=command_tool.run_command,
-        dangerous=True,  # 任意 shell 命令，属危险操作，需人工审批
+        risk="dangerous",
     ))
 
     registry.register(Tool(

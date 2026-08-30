@@ -161,9 +161,12 @@ def test_default_mode_does_not_approve_safe_ops(tmp_path):
     assert not any("拒绝" in m["content"] for m in tool_msgs)
 
 
-def test_approve_all_rejects_safe_ops(tmp_path):
-    """approve_all=True 时，非危险操作也要审批，拒绝则不执行。"""
-    r1 = LLMResponse(None, [ToolCall("c1", "list_directory", {})], "tool_calls", {})
+def test_approve_all_rejects_modify_ops(tmp_path):
+    """approve_all=True 时，写文件这类 modify 操作也要审批，拒绝则不执行。"""
+    r1 = LLMResponse(
+        None, [ToolCall("c1", "write_file", {"path": "a.txt", "content": "hi"})],
+        "tool_calls", {},
+    )
     r2 = LLMResponse("完成", [], "stop", {})
     cfg = _config(tmp_path)
     llm = FakeLLM([r1, r2])
@@ -174,6 +177,24 @@ def test_approve_all_rejects_safe_ops(tmp_path):
     agent.run("任务")
     tool_msgs = [m for m in llm.calls[-1][0] if m["role"] == "tool"]
     assert any("拒绝" in m["content"] for m in tool_msgs)
+    # 被拒绝 → 文件未写入
+    assert not (tmp_path / "a.txt").exists()
+
+
+def test_approve_all_does_not_approve_readonly(tmp_path):
+    """approve_all=True 时，readonly 操作仍永不审批。"""
+    r1 = LLMResponse(None, [ToolCall("c1", "list_directory", {})], "tool_calls", {})
+    r2 = LLMResponse("完成", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    agent = Agent(
+        llm, tools, cfg, "sys", approver=lambda name, args: False, approve_all=True
+    )
+    result = agent.run("任务")
+    assert result.success
+    tool_msgs = [m for m in llm.calls[-1][0] if m["role"] == "tool"]
+    assert not any("拒绝" in m["content"] for m in tool_msgs)
 
 
 def test_qa_over_file_flow(tmp_path):

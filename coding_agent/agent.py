@@ -61,7 +61,7 @@ class Agent:
         self.on_step = on_step or (lambda name, args, result: None)
         # 审批回调 approver(name, arguments) -> bool；为 None 表示完全不做人工审批。
         self.approver = approver
-        # 审批范围：True = 对所有工具调用都审批；False = 只审批危险操作。
+        # 审批范围：True = 对 modify 与 dangerous 都审批；False = 只审批 dangerous。
         self.approve_all = approve_all
         # 流式文本回调 on_text(text)；为 None 时走非流式 chat，否则走 chat_stream
         self.on_text = on_text
@@ -109,9 +109,12 @@ class Agent:
                     ctx.add_tool_result(tc.id, tc.name, "任务已结束")
                     self.on_step("finish", {"summary": finish_summary}, "任务已结束")
                     continue
-                # 审批范围：approve_all 时所有操作都审，否则只审危险操作（如 run_command）。
-                # 审批回调为 None（未配置）则一律直接执行。
-                needs_approval = self.approve_all or self.tools.is_dangerous(tc.name)
+                # 审批策略：readonly 永不审批；modify 仅在 approve_all 下审批；
+                # dangerous 默认就审批。审批回调为 None（未配置）则一律直接执行。
+                risk = self.tools.risk_of(tc.name)
+                needs_approval = risk == "dangerous" or (
+                    self.approve_all and risk == "modify"
+                )
                 if (
                     needs_approval
                     and self.approver is not None

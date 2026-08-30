@@ -18,6 +18,18 @@ def test_format_write_file_shows_size_not_content():
     assert "x" * 500 not in out  # 不打印正文
 
 
+def test_format_write_file_rejected_not_shown_as_written():
+    """write_file 被审批拒绝时，应标记 ✗ 拒绝，而非误显示成「已写入 N 字符」。"""
+    out = _format_step(
+        "write_file",
+        {"path": "a.py", "content": "x = 1"},
+        "用户拒绝了该操作，未执行。",
+    )
+    assert "✗" in out
+    assert "拒绝" in out
+    assert "字符" not in out  # 不应显示「已写入 N 字符」
+
+
 def test_format_edit_file_shows_diff():
     out = _format_step(
         "edit_file",
