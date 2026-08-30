@@ -19,3 +19,19 @@ def test_build_system_prompt_injects_rules():
     p = build_system_prompt("/ws", "禁止使用 print")
     assert "禁止使用 print" in p
     assert "项目自定义规则" in p
+
+
+def test_system_prompt_encourages_proactive_retrieval():
+    """系统提示词应引导模型：问题需要读文件但未指定文件时，主动检索。"""
+    p = build_system_prompt("/ws")
+    assert "主动检索" in p
+    assert "search_content" in p
+    assert "read_file" in p
+
+
+def test_system_prompt_hints_python_command():
+    """系统提示词应提示模型先确认 python/python3 哪个可用，减少无效尝试。"""
+    p = build_system_prompt("/ws")
+    assert "python" in p
+    assert "python3" in p
+    assert "确认" in p

@@ -143,3 +143,19 @@ def test_dangerous_tool_approved_runs(tmp_path):
     agent.run("任务")
     tool_msgs = [m for m in llm.calls[-1][0] if m["role"] == "tool"]
     assert any("hi" in m["content"] for m in tool_msgs)
+
+
+def test_qa_over_file_flow(tmp_path):
+    """「检索→阅读→作答」的基于文件的问答链路能端到端跑通。"""
+    (tmp_path / "data.txt").write_text("1\n2\n3\n")
+    r1 = LLMResponse(
+        None, [ToolCall("c1", "search_content", {"pattern": "data"})], "tool_calls", {}
+    )
+    r2 = LLMResponse(
+        None, [ToolCall("c2", "read_file", {"path": "data.txt"})], "tool_calls", {}
+    )
+    r3 = LLMResponse("平均值是 2", [], "stop", {})
+    agent, _, _ = _agent(tmp_path, [r1, r2, r3])
+    result = agent.run("data 文件里的数字平均值是多少")
+    assert result.success
+    assert result.final_answer == "平均值是 2"
