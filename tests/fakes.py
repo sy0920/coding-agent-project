@@ -13,7 +13,8 @@ class FakeLLM:
         self.summarize_calls = []
 
     def chat(self, messages, tools=None, max_retries=3):
-        self.calls.append((messages, tools))
+        # 记录本次调用时的消息快照（拷贝而非引用），避免之后被 agent 追加消息而污染断言。
+        self.calls.append((list(messages), tools))
         if not self.responses:
             return LLMResponse(content="done", tool_calls=[], finish_reason="stop", usage={})
         return self.responses.pop(0)

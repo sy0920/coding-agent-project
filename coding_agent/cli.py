@@ -51,7 +51,9 @@ def _run_task(config, agent, task, verbose):
 
 def _repl(config, agent, verbose):
     print(f"coding-agent 交互模式（模型 {config.model}）")
-    print("输入编程任务开始，输入 exit / quit / 空行退出。\n")
+    print("输入编程任务开始；后续输入会延续同一会话（agent 记住上下文）。")
+    print("输入 exit / quit / 空行退出；输入 clear 清空会话重新开始。\n")
+    conversation = None
     while True:
         try:
             task = input(">>> ").strip()
@@ -60,7 +62,12 @@ def _repl(config, agent, verbose):
             break
         if task in ("", "exit", "quit"):
             break
-        result = agent.run(task)
+        if task in ("clear", "/clear"):
+            conversation = None
+            print("（已清空会话，开始新会话）\n")
+            continue
+        result = agent.run(task, conversation)
+        conversation = result.conversation
         print("\n" + "─" * 60)
         print(result.final_answer or "（无输出）")
         if verbose:

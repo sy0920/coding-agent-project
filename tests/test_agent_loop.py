@@ -80,3 +80,35 @@ def test_repetition_guard_injects_hint(tmp_path):
         for m in call[0]
     )
     assert injected
+
+
+def test_conversation_reuse_across_turns(tmp_path):
+    """复用 conversation 时，下一轮模型能看到上一轮的完整历史。"""
+    r1 = LLMResponse(
+        None, [ToolCall("c1", "write_file", {"path": "a.txt", "content": "hi"})],
+        "tool_calls", {},
+    )
+    r2 = LLMResponse("已写好", [], "stop", {})
+    agent, llm, _ = _agent(tmp_path, [r1, r2])
+
+    first = agent.run("写文件")
+    assert first.conversation is not None
+
+    # 第二轮复用 first.conversation
+    agent.run("再给它加个测试", conversation=first.conversation)
+    msgs = llm.calls[-1][0]
+    assert msgs[1]["role"] == "user" and msgs[1]["content"] == "写文件"
+    assert msgs[-1]["role"] == "user" and msgs[-1]["content"] == "再给它加个测试"
+    assert any(m["role"] == "tool" for m in msgs)  # 上一轮的工具结果仍在
+
+
+def test_run_without_conversation_starts_fresh(tmp_path):
+    """不传 conversation 时，每次 run 都是全新上下文（互不影响）。"""
+    r = LLMResponse("ok", [], "stop", {})
+    agent, llm, _ = _agent(tmp_path, [r, r])
+    agent.run("任务1")
+    agent.run("任务2")
+    second_msgs = llm.calls[-1][0]
+    # 第二轮里不应出现第一轮的用户消息
+    contents = [m.get("content") for m in second_msgs if m["role"] == "user"]
+    assert contents == ["任务2"]

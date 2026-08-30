@@ -33,6 +33,8 @@ class AgentResult:
     iterations: int = 0
     stop_reason: str = ""  # finished / finish_tool / max_iterations
     usage: dict = field(default_factory=dict)
+    # 本轮结束时的话历史；交互模式下可把它传回下一次 run() 以延续多轮会话。
+    conversation: Optional[Conversation] = None
 
     def __str__(self) -> str:
         return self.final_answer
@@ -54,8 +56,9 @@ class Agent:
         # 进度回调 on_step(tool_name, arguments)，供 CLI 打印过程
         self.on_step = on_step or (lambda name, args: None)
 
-    def run(self, task: str) -> AgentResult:
-        ctx = Conversation(self.system_prompt, self.config.max_context_tokens)
+    def run(self, task: str, conversation: Optional[Conversation] = None) -> AgentResult:
+        # 传入已有会话则复用（多轮对话延续），否则新建一个全新会话。
+        ctx = conversation or Conversation(self.system_prompt, self.config.max_context_tokens)
         ctx.add_user(task)
 
         total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -73,7 +76,7 @@ class Agent:
             # 3. 无工具调用 → 最终回答
             if not resp.tool_calls:
                 ctx.add_assistant(resp.content, [])
-                return AgentResult(True, resp.content or "", i + 1, "finished", total_usage)
+                return AgentResult(True, resp.content or "", i + 1, "finished", total_usage, ctx)
 
             # 4. 有工具调用 → 记录 assistant 消息，逐个执行
             ctx.add_assistant(resp.content, resp.tool_calls)
@@ -90,7 +93,7 @@ class Agent:
                 self.on_step(tc.name, tc.arguments)
 
             if finish_summary is not None:
-                return AgentResult(True, finish_summary, i + 1, "finish_tool", total_usage)
+                return AgentResult(True, finish_summary, i + 1, "finish_tool", total_usage, ctx)
 
             # 5. 重复 / 死循环检测
             signature = self._signature(resp.tool_calls)
@@ -112,6 +115,7 @@ class Agent:
             self.config.max_iterations,
             "max_iterations",
             total_usage,
+            ctx,
         )
 
     # ---- 内部 ---------------------------------------------------------
