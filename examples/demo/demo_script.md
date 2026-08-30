@@ -79,10 +79,7 @@ python -m coding_agent --verbose
 sample.txt 里出现次数最多的词是什么？出现了几次？     # 文件问答（会话里记得路径）
 /clear                         # 清空，隔离新会话
 写一个 hello.py，打印 hello world                    # 全新会话、从零开始
-/switch analyzer               # 切回保存的会话
-更新 README.md，补充 filter_stopwords 函数和 --no-stopwords 选项的用法说明
 /sessions                      # 列出所有会话
-exit
 ```
 
 **关键观察点：** `/resume` 后直接读 `texttool/sample.txt`（不重新探索）；`/clear` 后写 `hello.py` 是从零开始（不记得 texttool）；`/switch` 回来后又能直接改 `texttool/README.md`。
