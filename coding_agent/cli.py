@@ -167,14 +167,50 @@ def _make_approver():
     return approve
 
 
-def _run_task(config, agent, task, verbose):
+class _TextStreamer:
+    """流式文本输出：把模型回复的增量文字实时打印到 stdout。
+
+    LLMClient.chat_stream 每收到一段文本增量就调用一次本对象；这里负责逐字
+    flush，并在每轮回复开头加一个 `▸ ` 前缀，以区分「模型正在说」与工具过程。
+    """
+
+    def __init__(self) -> None:
+        self._started = False
+
+    def reset(self) -> None:
+        """新一轮 run 开始前调用，让下一段输出重新打印 `▸ ` 前缀。"""
+        self._started = False
+
+    def __call__(self, text: str) -> None:
+        if not self._started:
+            sys.stdout.write("\n▸ ")
+            self._started = True
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+
+def _print_final_answer(result) -> None:
+    """打印最终结果。
+
+    finished 场景的最终答案已在流式阶段被 _TextStreamer 实时打印，这里只补一个
+    空行收尾，避免重复；finish_tool / max_iterations 场景的 final_answer 并非
+    流式产出（前者是 finish 工具参数、后者是错误消息），仍需打印。
+    """
+    if result.stop_reason == "finished":
+        print()
+    else:
+        print("\n【结果】")
+        print(result.final_answer or "（无输出）")
+
+
+def _run_task(config, agent, task, verbose, streamer):
     print(f"模型：{config.model}   工作目录：{os.path.abspath(config.workspace)}\n")
     print(f"任务：{task}\n")
     print("─" * 60)
+    streamer.reset()
     result = agent.run(task)
     print("\n" + "─" * 60)
-    print("\n【结果】")
-    print(result.final_answer or "（无输出）")
+    _print_final_answer(result)
     if verbose:
         print(f"\n[迭代 {result.iterations} 轮 / 终止原因 {result.stop_reason} / "
               f"tokens {result.usage.get('total_tokens', 0)}]")
@@ -224,7 +260,7 @@ def _handle_session_command(task, conversation, current_name, store, max_context
     return False, conversation, current_name, None
 
 
-def _repl(config, agent, verbose):
+def _repl(config, agent, verbose, streamer):
     store = SessionStore(os.path.join(config.workspace, ".sessions"))
     print(f"coding-agent 交互模式（模型 {config.model}）")
     print("输入编程任务开始；后续输入会延续同一会话（agent 记住上下文，每轮自动保存）。")
@@ -249,12 +285,13 @@ def _repl(config, agent, verbose):
             print()
             continue
 
+        streamer.reset()
         result = agent.run(task, conversation)
         conversation = result.conversation
         # 自动持久化：每轮结束自动落盘，退出后下次仍可 /resume 恢复
         store.save(current_name, conversation)
         print("\n" + "─" * 60)
-        print(result.final_answer or "（无输出）")
+        _print_final_answer(result)
         if verbose:
             print(f"[迭代 {result.iterations} 轮 / 终止原因 {result.stop_reason}]")
         print()
@@ -284,6 +321,7 @@ def main(argv=None) -> int:
         llm = LLMClient(config)
         tools = build_registry(config)
         instructions = load_project_instructions(config.workspace)
+        streamer = _TextStreamer()
         agent = Agent(
             llm,
             tools,
@@ -291,14 +329,15 @@ def main(argv=None) -> int:
             build_system_prompt(config.workspace, instructions),
             on_step=_make_step_printer() if args.verbose else None,
             approver=_make_approver() if args.approve else None,
+            on_text=streamer,
         )
     except AgentError as exc:
         print(f"启动失败：{exc}", file=sys.stderr)
         return 2
 
     if args.task:
-        return _run_task(config, agent, args.task, args.verbose)
-    return _repl(config, agent, args.verbose)
+        return _run_task(config, agent, args.task, args.verbose, streamer)
+    return _repl(config, agent, args.verbose, streamer)
 
 
 if __name__ == "__main__":
