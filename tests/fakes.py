@@ -19,6 +19,13 @@ class FakeLLM:
             return LLMResponse(content="done", tool_calls=[], finish_reason="stop", usage={})
         return self.responses.pop(0)
 
+    def chat_stream(self, messages, tools=None, on_text=None, max_retries=3):
+        # 复用 chat 的响应队列；把 content 整段回调给 on_text，模拟流式文本输出。
+        resp = self.chat(messages, tools, max_retries)
+        if on_text is not None and resp.content:
+            on_text(resp.content)
+        return resp
+
     def summarize(self, text, max_tokens=512):
         self.summarize_calls.append(text)
         return "（摘要）"

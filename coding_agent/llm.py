@@ -14,7 +14,7 @@ from typing import Any, Optional
 from openai import OpenAI
 
 from .errors import LLMError
-from .parsing import ToolCall, parse_tool_calls
+from .parsing import ToolCall, parse_tool_calls, parse_streamed_tool_calls
 
 
 @dataclass
@@ -57,6 +57,80 @@ class LLMClient:
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)  # 简单指数退避：1s、2s
         raise LLMError(f"调用模型失败（已重试 {max_retries} 次）：{last_err}")
+
+    def chat_stream(
+        self, messages, tools=None, on_text=None, max_retries: int = 3
+    ) -> LLMResponse:
+        """流式发送一轮对话，返回与非流式 chat 完全一致的 LLMResponse。
+
+        与非流式的唯一区别：模型吐出的文本会边收边通过 on_text(text) 回调交给
+        调用方（供 CLI 实时打印），而不是等整段回包后一次性返回。工具调用的
+        流式分片在内部累积、流结束后才解析，因此对上层完全不可见。
+        """
+        on_text = on_text or (lambda text: None)
+        last_err: Optional[Exception] = None
+        for attempt in range(max_retries):
+            try:
+                return self._stream_once(messages, tools, on_text)
+            except Exception as exc:  # noqa: BLE001 —— 网络/限流/超时等均视为可重试
+                last_err = exc
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+        raise LLMError(f"调用模型失败（已重试 {max_retries} 次）：{last_err}")
+
+    def _stream_once(self, messages, tools, on_text) -> LLMResponse:
+        kwargs = self._build_kwargs(messages, tools)
+        kwargs["stream"] = True
+        # 让最后一个 chunk 携带 usage，保证 token 统计与上下文压缩预算不因流式而丢
+        kwargs["stream_options"] = {"include_usage": True}
+        stream = self.client.chat.completions.create(**kwargs)
+
+        content_parts: list = []
+        # 流式协议里 tool_calls 按 index 分片：id/name 只在首片，arguments 逐片拼接。
+        # 这里跨 chunk 累积成 {index: {id, name, arguments}}，流结束后再统一解析。
+        slots: dict = {}
+        finish_reason = ""
+        usage: dict = {}
+
+        for chunk in stream:
+            if getattr(chunk, "usage", None) is not None:
+                usage = self._extract_usage(chunk)
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+
+            # 文本增量：直接透传给 on_text，实现逐字输出
+            if delta.content:
+                content_parts.append(delta.content)
+                on_text(delta.content)
+
+            # 工具调用增量：按 index 累积
+            for tc_delta in delta.tool_calls or []:
+                slot = slots.setdefault(
+                    tc_delta.index, {"id": "", "name": "", "arguments": ""}
+                )
+                if tc_delta.id:
+                    slot["id"] = tc_delta.id
+                fn = getattr(tc_delta, "function", None)
+                if fn is not None:
+                    if fn.name:
+                        slot["name"] = fn.name
+                    if fn.arguments:
+                        slot["arguments"] += fn.arguments
+
+            if getattr(choice, "finish_reason", None):
+                finish_reason = choice.finish_reason
+
+        content = "".join(content_parts) or None
+        return LLMResponse(
+            content=content,
+            tool_calls=parse_streamed_tool_calls(slots),
+            finish_reason=finish_reason,
+            usage=usage,
+        )
 
     def summarize(self, text: str, max_tokens: int = 512) -> str:
         """对一段对话历史做摘要，用于上下文压缩。"""

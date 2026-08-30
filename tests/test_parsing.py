@@ -1,4 +1,4 @@
-from coding_agent.parsing import ToolCall, parse_tool_calls
+from coding_agent.parsing import ToolCall, parse_streamed_tool_calls, parse_tool_calls
 
 
 class _FakeFn:
@@ -42,3 +42,23 @@ def test_to_api_dict_roundtrip():
     assert d["type"] == "function"
     assert d["function"]["name"] == "finish"
     assert d["id"] == "c1"
+
+
+def test_parse_streamed_tool_calls_sorted_by_index():
+    """流式累积的 slots 应按 index 升序解析成 ToolCall。"""
+    slots = {
+        1: {"id": "c1", "name": "read_file", "arguments": '{"path": "a.txt"}'},
+        0: {"id": "c0", "name": "list_directory", "arguments": "{}"},
+    }
+    tcs = parse_streamed_tool_calls(slots)
+    assert [tc.id for tc in tcs] == ["c0", "c1"]
+    assert tcs[0].name == "list_directory" and tcs[0].arguments == {}
+    assert tcs[1].name == "read_file" and tcs[1].arguments == {"path": "a.txt"}
+
+
+def test_parse_streamed_tool_calls_invalid_json():
+    """流式累积出的非法 arguments 同样记录 parse_error 而非抛异常。"""
+    slots = {0: {"id": "c0", "name": "run_command", "arguments": "not json"}}
+    tcs = parse_streamed_tool_calls(slots)
+    assert tcs[0].parse_error is not None
+    assert tcs[0].arguments == {}

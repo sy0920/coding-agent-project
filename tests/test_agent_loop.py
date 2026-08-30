@@ -217,3 +217,18 @@ def test_on_step_receives_compact_event(tmp_path, monkeypatch):
     compact = [args for name, args, _ in steps if name == "compact"]
     assert compact
     assert "before" in compact[0] and "after" in compact[0]
+
+
+def test_on_text_receives_streamed_content(tmp_path):
+    """配置 on_text 时 agent 走 chat_stream，最终答案经 on_text 实时回调输出。"""
+    r1 = LLMResponse(None, [ToolCall("c1", "list_directory", {})], "tool_calls", {})
+    r2 = LLMResponse("答案是 42", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    received = []
+    agent = Agent(llm, tools, cfg, "sys", on_text=received.append)
+    result = agent.run("任务")
+    assert result.success
+    # 只有最终答案轮（有 content）触发回调；工具调用轮 content 为空不回调
+    assert received == ["答案是 42"]

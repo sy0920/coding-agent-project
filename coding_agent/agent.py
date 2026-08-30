@@ -49,6 +49,7 @@ class Agent:
         system_prompt: str,
         on_step: Optional[Callable[[str, dict, str], None]] = None,
         approver: Optional[Callable[[str, dict], bool]] = None,
+        on_text: Optional[Callable[[str], None]] = None,
     ):
         self.llm = llm
         self.tools = tools
@@ -59,6 +60,8 @@ class Agent:
         self.on_step = on_step or (lambda name, args, result: None)
         # 危险操作审批回调 approver(name, arguments) -> bool；为 None 表示无需审批
         self.approver = approver
+        # 流式文本回调 on_text(text)；为 None 时走非流式 chat，否则走 chat_stream
+        self.on_text = on_text
 
     def run(self, task: str, conversation: Optional[Conversation] = None) -> AgentResult:
         # 传入已有会话则复用（多轮对话延续），否则新建一个全新会话。
@@ -79,8 +82,13 @@ class Agent:
                     "较早的历史已压缩为摘要",
                 )
 
-            # 2. 调用模型
-            resp = self.llm.chat(ctx.messages, self.tools.to_openai_tools())
+            # 2. 调用模型（配置了 on_text 时走流式，实时打印文本增量）
+            if self.on_text is not None:
+                resp = self.llm.chat_stream(
+                    ctx.messages, self.tools.to_openai_tools(), on_text=self.on_text
+                )
+            else:
+                resp = self.llm.chat(ctx.messages, self.tools.to_openai_tools())
             self._accumulate_usage(total_usage, resp.usage)
 
             # 3. 无工具调用 → 最终回答
