@@ -39,7 +39,7 @@ def build_system_prompt(workspace: str, project_instructions: str = "") -> str:
 - finish：任务完成后调用，汇报结果
 
 工作方式：
-1. 对于多步任务，先用 todo 工具列出计划，再逐步执行并在完成时更新清单。
+1. 对于多步任务，先用 todo 工具列出计划，再逐步执行并在完成时更新清单。任务收尾（调用 finish 之前）时最后更新一次 todo：已完成的项标 done=true，未能完成的项标 done=false 并在 note 里写明原因。
 2. 当用户的问题需要基于工作目录中的文件内容回答、但未明确指定文件时，先用 list_directory / search_content 主动检索相关文件，再用 read_file 阅读，然后作答，不要凭空回答。
 3. 修改或编写代码前，先阅读相关文件、了解现状，不要凭空猜测文件内容。
 4. 编写或修改代码后，尽量运行命令（编译 / 测试 / 运行）验证结果。

@@ -128,13 +128,25 @@ def build_registry(config) -> ToolRegistry:
 
     registry.register(Tool(
         name="todo",
-        description="维护任务清单：多步任务前先列出计划，完成后更新。传入的完整列表会整体覆盖当前清单。",
+        description=(
+            "维护任务清单：多步任务前先列出计划，完成后更新。传入的完整列表会整体"
+            "覆盖当前清单。每项是对象 {text, done, note}：done=true 表示已完成；"
+            "未完成的项写 note 说明原因（会以 ✗ 标出）。"
+        ),
         parameters={
             "type": "object",
             "properties": {
                 "todos": {
                     "type": "array",
-                    "items": {"type": "string"},
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string", "description": "任务项描述"},
+                            "done": {"type": "boolean", "description": "是否已完成，默认 false"},
+                            "note": {"type": "string", "description": "未完成的原因说明，仅当该项未完成时填写"},
+                        },
+                        "required": ["text"],
+                    },
                     "description": "任务项列表；空数组表示清空清单",
                 },
             },

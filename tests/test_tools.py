@@ -110,3 +110,26 @@ def test_todo_roundtrip(tmp_path):
     assert "写代码" not in out2 and "只剩收尾" in out2
     out3 = reg.execute("todo", {"todos": []})
     assert "清空" in out3
+
+
+def test_todo_done_and_pending_marks(tmp_path):
+    """完成项打 ✓；未完成且写了 note 的项打 ✗ 并附原因。"""
+    reg = _registry(tmp_path)
+    out = reg.execute("todo", {"todos": [
+        {"text": "创建目录", "done": True},
+        {"text": "编写代码", "done": True},
+        {"text": "试运行", "done": False, "note": "python 未安装"},
+    ]})
+    assert "✓ 1. 创建目录" in out
+    assert "✓ 2. 编写代码" in out
+    assert "✗ 3. 试运行" in out
+    assert "未完成：python 未安装" in out
+
+
+def test_todo_plain_string_stays_neutral(tmp_path):
+    """纯字符串项视为待办，不带 ✓/✗ 标记（兼容旧写法）。"""
+    reg = _registry(tmp_path)
+    out = reg.execute("todo", {"todos": ["写代码", "写测试"]})
+    assert "1. 写代码" in out
+    assert "2. 写测试" in out
+    assert "✓" not in out and "✗" not in out
