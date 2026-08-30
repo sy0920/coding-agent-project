@@ -84,3 +84,29 @@ def test_list_directory(tmp_path):
     reg = _registry(tmp_path)
     out = reg.execute("list_directory", {})
     assert "a.py" in out and "sub" in out
+
+
+def test_git_status(tmp_path):
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=str(tmp_path), check=True)
+    (tmp_path / "new.txt").write_text("x")
+    reg = _registry(tmp_path)
+    out = reg.execute("git", {"subcommand": "status"})
+    assert "new.txt" in out
+
+
+def test_git_rejects_unknown_subcommand(tmp_path):
+    reg = _registry(tmp_path)
+    out = reg.execute("git", {"subcommand": "commit"})
+    assert "不支持" in out
+
+
+def test_todo_roundtrip(tmp_path):
+    reg = _registry(tmp_path)
+    out = reg.execute("todo", {"todos": ["写代码", "写测试"]})
+    assert "写代码" in out and "写测试" in out
+    out2 = reg.execute("todo", {"todos": ["只剩收尾"]})
+    assert "写代码" not in out2 and "只剩收尾" in out2
+    out3 = reg.execute("todo", {"todos": []})
+    assert "清空" in out3

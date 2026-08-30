@@ -48,6 +48,7 @@ class Agent:
         config,
         system_prompt: str,
         on_step: Optional[Callable[[str, dict], None]] = None,
+        approver: Optional[Callable[[str, dict], bool]] = None,
     ):
         self.llm = llm
         self.tools = tools
@@ -55,6 +56,8 @@ class Agent:
         self.system_prompt = system_prompt
         # 进度回调 on_step(tool_name, arguments)，供 CLI 打印过程
         self.on_step = on_step or (lambda name, args: None)
+        # 危险操作审批回调 approver(name, arguments) -> bool；为 None 表示无需审批
+        self.approver = approver
 
     def run(self, task: str, conversation: Optional[Conversation] = None) -> AgentResult:
         # 传入已有会话则复用（多轮对话延续），否则新建一个全新会话。
@@ -88,7 +91,15 @@ class Agent:
                     ctx.add_tool_result(tc.id, tc.name, "任务已结束")
                     self.on_step("finish", {"summary": finish_summary})
                     continue
-                result = self._execute(tc)
+                # 危险操作（如 run_command）在配置了审批回调时，先征求用户同意
+                if (
+                    self.tools.is_dangerous(tc.name)
+                    and self.approver is not None
+                    and not self.approver(tc.name, tc.arguments)
+                ):
+                    result = "用户拒绝了该操作，未执行。"
+                else:
+                    result = self._execute(tc)
                 ctx.add_tool_result(tc.id, tc.name, result)
                 self.on_step(tc.name, tc.arguments)
 

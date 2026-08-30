@@ -20,6 +20,7 @@ class Tool:
     description: str
     parameters: dict  # JSON Schema
     func: Callable[..., str]  # 返回「给模型看的」字符串结果
+    dangerous: bool = False  # 危险操作（如执行命令），需经审批才能执行
 
     def to_openai_dict(self) -> dict:
         """转为 OpenAI 兼容的工具定义。"""
@@ -52,6 +53,11 @@ class ToolRegistry:
 
     def names(self) -> list:
         return list(self._tools.keys())
+
+    def is_dangerous(self, name: str) -> bool:
+        """该工具是否属于危险操作（需要人工审批）。"""
+        tool = self._tools.get(name)
+        return bool(tool and tool.dangerous)
 
     def to_openai_tools(self) -> list:
         return [t.to_openai_dict() for t in self._tools.values()]

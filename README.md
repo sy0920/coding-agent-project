@@ -25,8 +25,11 @@
 
 - **完整 agent 循环**：`思考 → 行动 → 观察` 反复迭代，直到模型给出最终回答或调用 `finish` 工具。
 - **多轮会话记忆**：交互模式下后续输入沿用同一会话（agent 记住之前的上下文）。
-- **会话持久化**：`/save` 保存、`/resume`（或 `/switch`）恢复、`/sessions` 列出、`/clear` 清空，会话可跨进程恢复。
-- **自研工具系统**：7 个工具（读文件 / 写文件 / 精确替换 / 列目录 / 搜索 / 执行命令 / 结束），全部**在本地执行**。
+- **会话持久化**：每轮自动落盘；`/save` 命名保存、`/resume`（或 `/switch`）恢复、`/sessions` 列出、`/clear` 清空，会话可跨进程恢复。
+- **自研工具系统**：9 个工具（读文件 / 写文件 / 精确替换 / 列目录 / 搜索 / 执行命令 / git / todo / 结束），全部**在本地执行**。
+- **任务规划**：`todo` 工具让模型在多步任务前先列计划、完成后更新，进度可追踪。
+- **人工审批**：`--approve` 开启后，执行命令等危险操作前询问用户确认（human-in-the-loop）。
+- **项目级规则**：自动读取工作目录下的 `AGENTS.md` / `CLAUDE.md`，注入系统提示词定制 agent 行为。
 - **上下文管理**：自研 token 估算 + 超预算时的「摘要式压缩」，压缩后消息结构仍合法（不拆散 tool_calls 与结果）。
 - **多重终止条件**：无工具调用即结束、`finish` 工具、最大迭代上限、重复调用死循环检测。
 - **健壮的错误处理**：工具异常反馈给模型自纠正；参数 JSON 非法时回传错误而非崩溃；命令超时控制；API 请求带指数退避重试。
@@ -62,7 +65,12 @@ python -m coding_agent "把 README 里所有 'colour' 改成 'color'" --workspac
 
 # 指定工作目录与迭代上限
 python -m coding_agent "重构 utils.py 并跑通测试" --workspace ./my_project --max-iterations 40
+
+# 执行危险操作（命令）前人工确认
+python -m coding_agent "重构 utils.py" --approve
 ```
+
+> 想定制 agent 行为？在工作目录下放一个 `AGENTS.md`（或 `CLAUDE.md`），内容会被自动注入系统提示词，作为最高优先级的项目规则。
 
 ## 配置项
 
@@ -116,6 +124,8 @@ cli.py ──▶ Agent（核心循环）
 | `edit_file` | 精确字符串替换 | 唯一性校验，防误替换 |
 | `search_content` | 正则搜索 | Python `re`，跨平台 |
 | `run_command` | 执行命令 | `subprocess` + 超时 + 截断 |
+| `git` | 只读查看 git 状态/差异/日志 | `git --no-pager`，仅 status/diff/log |
+| `todo` | 维护任务清单 | 内存列表，整体覆盖 |
 | `finish` | 结束并汇报 | 显式终止信号 |
 
 所有文件/命令都经过路径沙箱校验，限制在工作目录内。

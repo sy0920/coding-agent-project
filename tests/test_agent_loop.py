@@ -112,3 +112,34 @@ def test_run_without_conversation_starts_fresh(tmp_path):
     # 第二轮里不应出现第一轮的用户消息
     contents = [m.get("content") for m in second_msgs if m["role"] == "user"]
     assert contents == ["任务2"]
+
+
+def test_dangerous_tool_rejected_by_approver(tmp_path):
+    """审批拒绝时，危险命令不执行，工具结果反馈「拒绝」。"""
+    r1 = LLMResponse(
+        None, [ToolCall("c1", "run_command", {"command": "echo hi"})], "tool_calls", {}
+    )
+    r2 = LLMResponse("好", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    agent = Agent(llm, tools, cfg, "sys", approver=lambda name, args: False)
+    agent.run("任务")
+    tool_msgs = [m for m in llm.calls[-1][0] if m["role"] == "tool"]
+    assert any("拒绝" in m["content"] for m in tool_msgs)
+    assert not any("hi" in m["content"] for m in tool_msgs)
+
+
+def test_dangerous_tool_approved_runs(tmp_path):
+    """审批通过时，危险命令正常执行。"""
+    r1 = LLMResponse(
+        None, [ToolCall("c1", "run_command", {"command": "echo hi"})], "tool_calls", {}
+    )
+    r2 = LLMResponse("好", [], "stop", {})
+    cfg = _config(tmp_path)
+    llm = FakeLLM([r1, r2])
+    tools = build_registry(cfg)
+    agent = Agent(llm, tools, cfg, "sys", approver=lambda name, args: True)
+    agent.run("任务")
+    tool_msgs = [m for m in llm.calls[-1][0] if m["role"] == "tool"]
+    assert any("hi" in m["content"] for m in tool_msgs)

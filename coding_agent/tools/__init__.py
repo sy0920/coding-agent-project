@@ -3,7 +3,9 @@
 from .base import Tool, ToolRegistry, truncate
 from .command_tool import CommandTool
 from .file_tools import FileTools
+from .git_tool import GitTool
 from .search_tool import SearchTool
+from .todo_tool import TodoTool
 
 __all__ = ["Tool", "ToolRegistry", "truncate", "build_registry"]
 
@@ -14,6 +16,8 @@ def build_registry(config) -> ToolRegistry:
     file_tools = FileTools(config.workspace)
     command_tool = CommandTool(config.workspace, timeout=config.command_timeout)
     search_tool = SearchTool(config.workspace)
+    git_tool = GitTool(config.workspace)
+    todo_tool = TodoTool()
 
     registry.register(Tool(
         name="list_directory",
@@ -102,6 +106,41 @@ def build_registry(config) -> ToolRegistry:
             "required": ["command"],
         },
         func=command_tool.run_command,
+        dangerous=True,  # 任意 shell 命令，属危险操作，需人工审批
+    ))
+
+    registry.register(Tool(
+        name="git",
+        description="只读查看 git 仓库状态、工作区差异或最近提交日志。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "subcommand": {
+                    "type": "string",
+                    "enum": ["status", "diff", "log"],
+                    "description": "status=当前状态；diff=未提交改动；log=最近提交",
+                },
+            },
+            "required": ["subcommand"],
+        },
+        func=git_tool.git,
+    ))
+
+    registry.register(Tool(
+        name="todo",
+        description="维护任务清单：多步任务前先列出计划，完成后更新。传入的完整列表会整体覆盖当前清单。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "todos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "任务项列表；空数组表示清空清单",
+                },
+            },
+            "required": ["todos"],
+        },
+        func=todo_tool.set_todos,
     ))
 
     registry.register(Tool(
